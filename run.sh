@@ -2,25 +2,19 @@
 set -e
 
 # SyftBox app entry point for syft-simple-runner  
-# This script is called periodically by SyftBox to process the code execution queue
+# This script starts the long-running job polling service
 
-echo "🚀 Syft Simple Runner - Processing jobs..."
+echo "🚀 Syft Simple Runner - Starting service..."
 
-# Create virtual environment if it doesn't exist
-if [ ! -d ".venv" ]; then
-    echo "📦 Creating virtual environment..."
-    python -m venv .venv
-fi
+# Create virtual environment with uv (remove old one if exists)
+echo "📦 Setting up virtual environment with uv..."
+rm -rf .venv
+uv venv -p 3.12
 
-# Activate virtual environment
-source .venv/bin/activate
-
-# Install dependencies
+# Install dependencies using uv
 echo "📦 Installing dependencies..."
-pip install -e .
+uv pip install -e .
 
-# Run the queue processor
-echo "🔄 Processing queue..."
-python -m syft_simple_runner.app
-
-echo "✅ Queue processing complete." 
+# Run the queue processor (long-running service)
+echo "🔄 Starting job polling service..."
+uv run python -m syft_simple_runner.app

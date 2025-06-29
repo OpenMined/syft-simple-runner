@@ -7,7 +7,7 @@ name = "syft-simple-runner"
 dynamic = ["version"]
 description = "Simple and secure code execution runner for Syft Code Queue"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = "MIT"
 keywords = ["syft", "privacy", "federated-learning", "code-execution", "runner"]
 authors = [
@@ -16,7 +16,6 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -27,11 +26,6 @@ classifiers = [
 dependencies = [
   "loguru>=0.6.0",
   "pydantic>=2.0.0",
-]
-
-[project.optional-dependencies]
-syftbox = [
-  "syft-core>=0.1.0",
 ]
 
 [project.urls]

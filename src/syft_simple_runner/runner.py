@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 
 from loguru import logger
 
-from syft_code_queue.models import CodeJob, JobStatus
+from .models import SimpleJob as CodeJob, JobStatus
 
 
 class CodeRunner:

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "syft-simple-runner"
+dynamic = ["version"]
+description = "Simple and secure code execution runner for Syft Code Queue"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = ["syft", "privacy", "federated-learning", "code-execution", "runner"]
+authors = [
+  { name = "OpenMined", email = "info@openmined.org" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "loguru>=0.6.0",
+  "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+syftbox = [
+  "syft-core>=0.1.0",
+]
+
+[project.urls]
+Documentation = "https://github.com/OpenMined/syft-simple-runner#readme"
+Issues = "https://github.com/OpenMined/syft-simple-runner/issues"
+Source = "https://github.com/OpenMined/syft-simple-runner"
+
+[project.scripts]
+syft-simple-runner = "syft_simple_runner.cli:main"
+
+[tool.hatch.version]
+path = "src/syft_simple_runner/__init__.py"

@@ -18,13 +18,10 @@ rm -rf .venv
 echo "🐍 Creating virtual environment with Python 3.12..."
 uv venv --python 3.12
 
-# Activate the virtual environment to ensure we use the correct Python
-source .venv/bin/activate
-
-# Install dependencies using the virtual environment's pip
+# Install dependencies using uv pip (which handles the virtual environment)
 echo "📦 Installing dependencies..."
-python -m pip install --no-cache-dir -e .
+uv pip install --no-cache-dir -e .
 
 # Run the queue processor (long-running service)
 echo "🔄 Starting job polling service..."
-python -m syft_simple_runner.app
+uv run python -m syft_simple_runner.app

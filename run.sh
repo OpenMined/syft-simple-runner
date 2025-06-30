@@ -18,9 +18,13 @@ rm -rf .venv
 echo "🐍 Creating virtual environment with Python 3.12..."
 uv venv --python 3.12
 
-# Install dependencies using uv pip (which handles the virtual environment)
+# Set the virtual environment path for uv to use
+export VIRTUAL_ENV="$(pwd)/.venv"
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install dependencies using uv sync (which respects the virtual environment)
 echo "📦 Installing dependencies..."
-uv pip install --no-cache-dir -e .
+uv sync
 
 # Run the queue processor (long-running service)
 echo "🔄 Starting job polling service..."

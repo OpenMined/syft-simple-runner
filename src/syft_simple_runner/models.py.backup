@@ -44,29 +44,13 @@ class SimpleJob:
         self.status = JobStatus(job_data.get("status", "pending"))
         self.requester_email = job_data.get("requester_email", "")
         self.target_email = job_data.get("target_email", "")
-        
-        # Code folder (required by CodeJob format)
-        self.code_folder = job_data.get("code_folder")
-        if self.code_folder and isinstance(self.code_folder, str):
-            self.code_folder = Path(self.code_folder)
-        elif not self.code_folder and self.uid:
-            # Auto-derive code_folder from job structure if missing
-            # Standard structure: jobs/{uid}/code/
-            self.code_folder = Path(f"jobs/{self.uid}/code")
-        else:
-            # Fallback to ensure code_folder is never None
-            self.code_folder = Path("jobs/unknown/code")
-        
-        # Core fields matching CodeJob format
-        self.description = job_data.get("description")
+        self.script_content = job_data.get("script_content", "")
+        self.requirements_content = job_data.get("requirements_content", "")
         self.created_at = job_data.get("created_at", datetime.now().isoformat())
-        self.updated_at = job_data.get("updated_at", datetime.now().isoformat())
-        self.started_at = job_data.get("started_at")
+        self.approved_at = job_data.get("approved_at")
         self.completed_at = job_data.get("completed_at")
-        self.output_folder = job_data.get("output_folder")
-        self.error_message = job_data.get("error_message")
+        self.logs = job_data.get("logs", "")
         self.exit_code = job_data.get("exit_code")
-        self.tags = job_data.get("tags", [])
     
     @classmethod
     def from_file(cls, job_file: Path) -> "SimpleJob":
@@ -76,27 +60,20 @@ class SimpleJob:
         return cls(data)
     
     def save_to_file(self, job_file: Path):
-        """Save job to JSON file using CodeJob format for compatibility."""
+        """Save job to JSON file."""
         data = {
             "uid": self.uid,
             "name": self.name,
             "status": self.status.value,
             "requester_email": self.requester_email,
             "target_email": self.target_email,
-            "code_folder": str(self.code_folder) if self.code_folder else None,
-            "description": getattr(self, 'description', None),
+            "script_content": self.script_content,
+            "requirements_content": self.requirements_content,
             "created_at": self.created_at,
-            "updated_at": getattr(self, 'updated_at', datetime.now().isoformat()),
-            "started_at": self.started_at,
+            "approved_at": self.approved_at,
             "completed_at": self.completed_at,
-            "output_folder": str(self.output_folder) if self.output_folder else None,
-            "error_message": getattr(self, 'error_message', None),
+            "logs": self.logs,
             "exit_code": self.exit_code,
-            "tags": getattr(self, 'tags', []),
         }
-        # Remove None values but keep essential fields that CodeJob requires
-        essential_fields = {"code_folder"}  # Fields required by CodeJob validation
-        data = {k: v for k, v in data.items() if v is not None or k in essential_fields}
-        
         with open(job_file, 'w') as f:
             json.dump(data, f, indent=2)

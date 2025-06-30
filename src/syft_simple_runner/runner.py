@@ -35,6 +35,12 @@ class CodeRunner:
         Returns:
             Tuple of (exit_code, stdout, stderr)
         """
+        # Ensure job has a valid code_folder - derive it if missing
+        if not getattr(job, 'code_folder', None):
+            # For jobs created via submit_script(), code is in: jobs/{uid}/code/
+            job_dir = self._get_job_dir(job)
+            job.code_folder = job_dir / "code"
+        
         code_dir = job.code_folder
         run_script = code_dir / "run.sh"
         
@@ -99,7 +105,7 @@ class CodeRunner:
             with open(log_file, 'w') as f:
                 f.write(f"Job: {job.name} ({job.uid})\n")
                 f.write(f"Requester: {job.requester_email}\n")
-                f.write(f"Started: {job.started_at}\n")
+                f.write(f"Started: {getattr(job, 'started_at', 'N/A')}\n")
                 f.write(f"Duration: {duration:.2f}s\n")
                 f.write(f"Exit Code: {exit_code}\n")
                 f.write("-" * 50 + "\n")
@@ -173,6 +179,12 @@ class SafeCodeRunner(CodeRunner):
     
     def run_job(self, job: CodeJob) -> Tuple[int, str, str]:
         """Execute a job with additional security checks."""
+        # Ensure job has a valid code_folder - derive it if missing
+        if not getattr(job, 'code_folder', None):
+            # For jobs created via submit_script(), code is in: jobs/{uid}/code/
+            job_dir = self._get_job_dir(job)
+            job.code_folder = job_dir / "code"
+        
         # Read and validate the run.sh script
         run_script = job.code_folder / "run.sh"
         

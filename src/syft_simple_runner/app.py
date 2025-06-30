@@ -40,11 +40,11 @@ from .runner import run_job
 
 class SimpleRunnerApp:
     """Simple app that polls for and executes code jobs."""
-
+    
     def __init__(self, config: Optional[QueueConfig] = None):
         """Initialize the app."""
         try:
-            self.syftbox_client = SyftBoxClient.load()
+        self.syftbox_client = SyftBoxClient.load()
             self.config = config or QueueConfig(queue_name="code-queue")
             self.client = create_client(config=self.config)
 
@@ -83,9 +83,9 @@ class SimpleRunnerApp:
             except KeyboardInterrupt:
                 logger.info("👋 Shutting down...")
                 break
-            except Exception as e:
+                except Exception as e:
                 logger.error(f"Error in processing cycle {cycle}: {e}")
-                # Continue running despite errors
+                    # Continue running despite errors
                 sleep(poll_interval)
     
     def _process_cycle(self):
@@ -103,10 +103,10 @@ class SimpleRunnerApp:
         """Log information about pending jobs."""
         if self.client is None:
             return
-
+        
         # Get pending jobs for this user
         pending_jobs = self.client.list_jobs(target_email=self.email, status=JobStatus.pending)
-
+        
         if pending_jobs:
             logger.info(f"📋 {len(pending_jobs)} job(s) pending approval:")
             for job in pending_jobs:
@@ -117,7 +117,7 @@ class SimpleRunnerApp:
         """Execute all approved jobs."""
         if self.client is None:
             return
-
+        
         # Get approved jobs for this user
         approved_jobs = self.client.list_jobs(target_email=self.email, status=JobStatus.approved)
         
@@ -201,7 +201,7 @@ class SimpleRunnerApp:
                 "nc",
                 "netcat",
             ]
-
+        
             for cmd in dangerous_commands:
                 if cmd in script_content:
                     logger.warning(f"Script contains dangerous command: {cmd}")
@@ -209,7 +209,7 @@ class SimpleRunnerApp:
 
             return True
 
-        except Exception as e:
+            except Exception as e:
             logger.error(f"Failed to validate script: {e}")
             return False
 

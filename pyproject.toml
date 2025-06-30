@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "syft-simple-runner"
-version = "0.2.1"
+version = "0.2.2"
 description = "Simple code execution runner for SyftBox"
 readme = "README.md"
 license = "Apache-2.0"
@@ -30,10 +30,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
-    "pytest-cov",
-    "ruff",
-    "twine",
-    "build",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.3.0",
+    "twine>=6.1.0",
+    "build>=1.2.0",
 ]
 
 [project.scripts]
@@ -46,9 +46,6 @@ Issues = "https://github.com/OpenMined/syft-simple-runner/issues"
 
 [tool.hatch.version]
 path = "src/syft_simple_runner/__init__.py"
-
-[tool.uv.sources]
-syft-code-queue = { path = "../syft-code-queue" }
 
 [tool.ruff]
 line-length = 100

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from . import __version__
 from .app import RunnerApp
 
 
@@ -21,7 +22,7 @@ def main():
     parser.add_argument(
         "--version", 
         action="version", 
-        version="syft-simple-runner 0.1.0"
+        version=f"syft-simple-runner {__version__}"
     )
     
     parser.add_argument(

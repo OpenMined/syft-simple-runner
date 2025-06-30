@@ -4,42 +4,64 @@ build-backend = "hatchling.build"
 
 [project]
 name = "syft-simple-runner"
-dynamic = ["version"]
-description = "Simple and secure code execution runner for Syft Code Queue"
+version = "0.2.0"
+description = "Simple code execution runner for SyftBox"
 readme = "README.md"
-requires-python = ">=3.9"
-license = "MIT"
-keywords = ["syft", "privacy", "federated-learning", "code-execution", "runner"]
+license = "Apache-2.0"
 authors = [
-  { name = "OpenMined", email = "info@openmined.org" },
+    {name = "OpenMined", email = "info@openmined.org"},
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
 ]
+requires-python = ">=3.9"
 dependencies = [
-  "loguru>=0.6.0",
-  "pydantic>=2.0.0",
-  "syft-code-queue",
-  "syft-core>=0.2.5",
+    "syft-code-queue>=0.1.2",
+    "syft-core>=0.2.5",
+    "loguru>=0.7.0",
+    "pathlib>=1.0.1",
+    "click>=8.0.0",
 ]
 
-[project.urls]
-Documentation = "https://github.com/OpenMined/syft-simple-runner#readme"
-Issues = "https://github.com/OpenMined/syft-simple-runner/issues"
-Source = "https://github.com/OpenMined/syft-simple-runner"
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov",
+    "ruff",
+    "twine",
+    "build",
+]
 
 [project.scripts]
-syft-simple-runner = "syft_simple_runner.cli:main"
+syft-simple-runner = "syft_simple_runner.app:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenMined/syft-simple-runner"
+Repository = "https://github.com/OpenMined/syft-simple-runner.git"
+Issues = "https://github.com/OpenMined/syft-simple-runner/issues"
 
 [tool.hatch.version]
 path = "src/syft_simple_runner/__init__.py"
 
 [tool.uv.sources]
 syft-code-queue = { path = "../syft-code-queue" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

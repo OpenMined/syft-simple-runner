@@ -11,11 +11,15 @@ from loguru import logger
 from datetime import datetime
 import signal
 import sys
+from time import sleep
+from typing import Optional
+
+from syft_code_queue import CodeJob, JobStatus, QueueConfig, create_client
 
 try:
     from syft_core import Client as SyftBoxClient
 except ImportError:
-    logger.warning("syft_core not available - running in standalone mode")
+    logger.warning("syft_core not available - using mock client")
     # Fallback for development/testing
     class MockSyftBoxClient:
         def __init__(self):
@@ -31,209 +35,189 @@ except ImportError:
     
     SyftBoxClient = MockSyftBoxClient
 
-from .models import JobStatus, QueueConfig, SimpleJob
-from .runner import SafeCodeRunner
+from .runner import run_job
 
 
-class RunnerApp:
-    """
-    SyftBox app for processing code execution queue.
-    
-    This runs continuously, polling for approved jobs and executing them safely.
-    """
-    
-    def __init__(self):
-        self.syftbox_client = SyftBoxClient.load()
-        self.queue_config = QueueConfig(self._get_queue_dir())
-        self.runner = SafeCodeRunner()
-        self.max_concurrent_jobs = 3
-        self._running = False
-        
-        logger.info(f"Initialized Simple Runner App for {self.syftbox_client.email}")
+class SimpleRunnerApp:
+    """Simple app that polls for and executes code jobs."""
+
+    def __init__(self, config: Optional[QueueConfig] = None):
+        """Initialize the app."""
+        try:
+            self.syftbox_client = SyftBoxClient.load()
+            self.config = config or QueueConfig(queue_name="code-queue")
+            self.client = create_client(config=self.config)
+
+            logger.info(f"Initialized Simple Runner App for {self.email}")
+        except Exception as e:
+            logger.warning(f"Could not initialize Simple Runner: {e}")
+            # Set up in demo mode
+            self.syftbox_client = SyftBoxClient()
+            self.config = config or QueueConfig(queue_name="code-queue")
+            self.client = None
     
     @property
     def email(self) -> str:
-        """Get current user's email."""
+        """Get the current user's email."""
         return self.syftbox_client.email
     
-    def run(self):
+    def run(self, poll_interval: int = 1):
         """
-        Main app entry point - continuously polls for jobs every second.
+        Start continuous job polling and execution.
+
+        Args:
+            poll_interval: Seconds between polling cycles
         """
-        logger.info("🔄 Starting continuous job polling (every 1 second)...")
+        logger.info(f"🔄 Starting continuous job polling (every {poll_interval} second)...")
         
-        # Set up graceful shutdown
-        self._running = True
-        
-        def signal_handler(signum, frame):
-            logger.info("🛑 Received shutdown signal, stopping gracefully...")
-            self._running = False
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        cycle_count = 0
-        
-        try:
-            while self._running:
-                cycle_count += 1
+        cycle = 0
+        while True:
+            try:
+                # Process one cycle
+                self._process_cycle()
+                cycle += 1
                 
-                try:
-                    # Log pending jobs every 10 cycles (10 seconds) to avoid spam
-                    if cycle_count % 10 == 1:
-                        self._log_pending_jobs()
-                    
-                    # Execute approved jobs every cycle
-                    self._execute_approved_jobs()
-                    
-                    # Clean up old jobs every 60 cycles (1 minute)
-                    if cycle_count % 60 == 0:
-                        self._cleanup_old_jobs()
-                
-                except Exception as e:
-                    logger.error(f"Error in processing cycle {cycle_count}: {e}")
-                    # Continue running despite errors
-                    
-                # Sleep for 1 second before next poll
-                if self._running:
-                    time.sleep(1.0)
-                    
-        except KeyboardInterrupt:
-            logger.info("🛑 Received keyboard interrupt, shutting down...")
-        except Exception as e:
-            logger.error(f"Fatal error in polling loop: {e}")
-            raise
-        finally:
-            logger.info(f"✅ Job polling stopped - processed {cycle_count} cycles")
+                # Sleep until next cycle
+                sleep(poll_interval)
+            
+            except KeyboardInterrupt:
+                logger.info("👋 Shutting down...")
+                break
+            except Exception as e:
+                logger.error(f"Error in processing cycle {cycle}: {e}")
+                # Continue running despite errors
+                sleep(poll_interval)
+    
+    def _process_cycle(self):
+        """Process one polling cycle."""
+        if self.client is None:
+            return
+
+        # Log pending jobs
+        self._log_pending_jobs()
+
+        # Execute approved jobs
+        self._execute_approved_jobs()
     
     def _log_pending_jobs(self):
-        """Log information about pending jobs waiting for approval."""
-        pending_jobs = self._get_jobs_by_status(JobStatus.PENDING)
-        
-        # Only show jobs targeted at this datasite
-        my_pending = [job for job in pending_jobs if job.target_email == self.email]
-        
-        if my_pending:
-            logger.info(f"📋 {len(my_pending)} job(s) pending approval:")
-            for job in my_pending:
+        """Log information about pending jobs."""
+        if self.client is None:
+            return
+
+        # Get pending jobs for this user
+        pending_jobs = self.client.list_jobs(target_email=self.email, status=JobStatus.pending)
+
+        if pending_jobs:
+            logger.info(f"📋 {len(pending_jobs)} job(s) pending approval:")
+            for job in pending_jobs:
                 logger.info(f"   • {job.name} from {job.requester_email}")
         # Don't log when no jobs - too verbose for continuous polling
     
     def _execute_approved_jobs(self):
-        """Execute jobs that have been manually approved."""
-        approved_jobs = self._get_jobs_by_status(JobStatus.APPROVED)
+        """Execute all approved jobs."""
+        if self.client is None:
+            return
+
+        # Get approved jobs for this user
+        approved_jobs = self.client.list_jobs(target_email=self.email, status=JobStatus.approved)
         
-        # Only process jobs targeted at this datasite
-        my_approved = [job for job in approved_jobs if job.target_email == self.email]
-        
-        if not my_approved:
+        if not approved_jobs:
             # Don't log when no jobs - too verbose for continuous polling
             return
         
-        # Check how many jobs are currently running
-        running_jobs = self._get_jobs_by_status(JobStatus.RUNNING)
-        my_running = [job for job in running_jobs if job.target_email == self.email]
+        logger.info(f"🚀 Executing {len(approved_jobs)} approved job(s)")
         
-        # Limit concurrent executions
-        available_slots = self.max_concurrent_jobs - len(my_running)
-        if available_slots <= 0:
-            logger.info(f"Maximum concurrent jobs ({self.max_concurrent_jobs}) reached")
-            return
-        
-        # Execute jobs up to the limit
-        jobs_to_execute = my_approved[:available_slots]
-        
-        logger.info(f"🚀 Executing {len(jobs_to_execute)} approved job(s)")
-        
-        for job in jobs_to_execute:
+        for job in approved_jobs:
             self._execute_single_job(job)
     
-    def _execute_single_job(self, job: SimpleJob):
+    def _execute_single_job(self, job: CodeJob):
         """Execute a single job."""
+        if self.client is None:
+            return
+
+        logger.info(f"Starting execution of job: {job.name}")
+        
         try:
-            logger.info(f"Starting execution of job: {job.name}")
-            
             # Update status to running
-            job.status = JobStatus.RUNNING
-            job_file = self.queue_config.get_job_file(job.uid)
-            job.save_to_file(job_file)
+            job.update_status(JobStatus.running)
+            self.client._save_job(job)
             
-            # Execute the job
-            exit_code, stdout, stderr = self.runner.run_job(job)
+            # Get the job directory
+            job_dir = self.client._get_job_dir(job)
+            code_dir = job_dir / "code"
+            run_script = code_dir / "run.sh"
+
+            # Validate script
+            if not self._validate_script(run_script):
+                job.update_status(JobStatus.rejected, "Script contains potentially dangerous commands")
+                self.client._save_job(job)
+                return
+
+            # Create output directory
+            output_dir = job_dir / "output"
+            output_dir.mkdir(exist_ok=True)
+            job.output_folder = output_dir
+
+            # Execute the script
+            success, logs = run_job(job, code_dir, output_dir)
             
-            # Update job status and logs based on result
-            job.exit_code = exit_code
-            job.logs = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
-            job.completed_at = datetime.now().isoformat()
-            
-            if exit_code == 0:
-                job.status = JobStatus.COMPLETED
-                logger.info(f"Job {job.uid} completed successfully")
+            # Update job status and logs
+            if success:
+                job.update_status(JobStatus.completed)
             else:
-                job.status = JobStatus.FAILED
-                logger.warning(f"Job {job.uid} failed with exit code {exit_code}")
+                job.update_status(JobStatus.failed, "Execution failed")
+            
+            # Save logs
+            job.logs = logs
             
         except Exception as e:
-            error_msg = f"Job execution error: {e}"
-            job.status = JobStatus.FAILED
-            job.logs = error_msg
-            job.completed_at = datetime.now().isoformat()
-            logger.error(f"Job {job.uid} failed: {error_msg}")
+            logger.error(f"Error executing job {job.name}: {e}")
+            job.update_status(JobStatus.failed, str(e))
+            job.logs = str(e)
         
         finally:
             # Always save the final job state
-            job_file = self.queue_config.get_job_file(job.uid)
-            job.save_to_file(job_file)
+            self.client._save_job(job)
     
-    def _cleanup_old_jobs(self):
-        """Clean up old completed jobs (older than 24 hours)."""
-        cutoff_time = datetime.now().timestamp() - (24 * 60 * 60)  # 24 hours ago
-        
-        queue_dir = self._get_queue_dir()
-        if not queue_dir.exists():
-            return
-        
-        cleaned_count = 0
-        for job_file in queue_dir.glob("*.json"):
-            try:
-                job = SimpleJob.from_file(job_file)
-                if job.status in [JobStatus.COMPLETED, JobStatus.FAILED] and job.completed_at:
-                    completed_time = datetime.fromisoformat(job.completed_at).timestamp()
-                    if completed_time < cutoff_time:
-                        logger.debug(f"Cleaning up old job: {job.uid}")
-                        job_file.unlink()
-                        cleaned_count += 1
-                        
-            except Exception as e:
-                logger.warning(f"Failed to cleanup job {job_file}: {e}")
-        
-        if cleaned_count > 0:
-            logger.info(f"🧹 Cleaned up {cleaned_count} old job(s)")
-    
-    def _get_jobs_by_status(self, status: JobStatus):
-        """Get all jobs with a specific status."""
-        jobs = []
-        
-        for job_id in self.queue_config.list_jobs():
-            try:
-                job_file = self.queue_config.get_job_file(job_id)
-                job = SimpleJob.from_file(job_file)
-                if job.status == status:
-                    jobs.append(job)
-            except Exception as e:
-                logger.warning(f"Failed to load job {job_id}: {e}")
-        
-        return jobs
-    
-    def _get_queue_dir(self) -> Path:
-        """Get the queue directory."""
-        return self.syftbox_client.app_data("code-queue")
+    def _validate_script(self, script_path: Path) -> bool:
+        """Validate that a script is safe to execute."""
+        try:
+            # Basic validation - check that script exists and is readable
+            if not script_path.exists():
+                logger.error(f"Script does not exist: {script_path}")
+                return False
+
+            # Read script content
+            script_content = script_path.read_text()
+
+            # Check for potentially dangerous commands
+            dangerous_commands = [
+                "rm -rf",
+                "sudo",
+                "> /dev/null",
+                "2>&1",
+                "wget",
+                "curl",
+                "nc",
+                "netcat",
+            ]
+
+            for cmd in dangerous_commands:
+                if cmd in script_content:
+                    logger.warning(f"Script contains dangerous command: {cmd}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to validate script: {e}")
+            return False
 
 
 def main():
     """Main entry point for the SyftBox app."""
     try:
-        app = RunnerApp()
+        app = SimpleRunnerApp()
         app.run()
     except Exception as e:
         logger.error(f"App failed: {e}")

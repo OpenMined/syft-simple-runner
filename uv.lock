@@ -916,7 +916,7 @@ wheels = [
 
 [[package]]
 name = "syft-code-queue"
-version = "0.1.2"
+version = "0.1.3"
 source = { directory = "../syft-code-queue" }
 dependencies = [
     { name = "click" },
@@ -959,7 +959,7 @@ wheels = [
 
 [[package]]
 name = "syft-simple-runner"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

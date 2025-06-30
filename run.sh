@@ -14,21 +14,9 @@ export NONINTERACTIVE=1
 echo "📦 Setting up virtual environment with uv..."
 rm -rf .venv
 
-# Use system Python 3.12 if available, otherwise use 3.11 or 3.10
-PYTHON_VERSION="3.12"
-if ! command -v python3.12 &> /dev/null; then
-    if command -v python3.11 &> /dev/null; then
-        PYTHON_VERSION="3.11"
-    elif command -v python3.10 &> /dev/null; then
-        PYTHON_VERSION="3.10"
-    else
-        echo "❌ No suitable Python version found (3.10, 3.11, or 3.12)"
-        exit 1
-    fi
-fi
-
-echo "🐍 Using Python $PYTHON_VERSION"
-uv venv -p $PYTHON_VERSION
+# Let uv handle Python version management - it will download if needed
+echo "🐍 Creating virtual environment with Python 3.12..."
+uv venv --python 3.12
 
 # Activate the virtual environment to ensure we use the correct Python
 source .venv/bin/activate

@@ -6,6 +6,7 @@ This module runs as a SyftBox app, continuously polling for approved code execut
 """
 
 import time
+import json
 from pathlib import Path
 from loguru import logger
 from datetime import datetime
@@ -137,6 +138,8 @@ class SimpleRunnerApp:
 
         logger.info(f"Starting execution of job: {job.name}")
         
+        start_time = datetime.now()
+        
         try:
             # Update status to running
             job.update_status(JobStatus.running)
@@ -151,6 +154,7 @@ class SimpleRunnerApp:
             if not self._validate_script(run_script):
                 job.update_status(JobStatus.rejected, "Script contains potentially dangerous commands")
                 self.client._save_job(job)
+                self._store_job_history(job, start_time, datetime.now(), False, "Script validation failed")
                 return
 
             # Create output directory
@@ -170,14 +174,59 @@ class SimpleRunnerApp:
             # Save logs
             job.logs = logs
             
+            # Store job history
+            end_time = datetime.now()
+            self._store_job_history(job, start_time, end_time, success, logs)
+            
         except Exception as e:
             logger.error(f"Error executing job {job.name}: {e}")
             job.update_status(JobStatus.failed, str(e))
             job.logs = str(e)
+            
+            # Store job history for failed execution
+            end_time = datetime.now()
+            self._store_job_history(job, start_time, end_time, False, str(e))
         
         finally:
             # Always save the final job state
             self.client._save_job(job)
+    
+    def _store_job_history(self, job: CodeJob, start_time: datetime, end_time: datetime, success: bool, logs: str):
+        """Store job execution history locally."""
+        try:
+            # Get the app data directory
+            app_data_dir = self.syftbox_client.app_data("syft-simple-runner")
+            history_dir = app_data_dir / "job_history"
+            history_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Calculate execution time
+            execution_time = (end_time - start_time).total_seconds()
+            
+            # Create job history data
+            job_data = {
+                "uid": job.uid,
+                "name": job.name,
+                "status": job.status.value,
+                "requester_email": job.requester_email,
+                "target_email": job.target_email,
+                "created_at": job.created_at,
+                "started_at": start_time.isoformat(),
+                "completed_at": end_time.isoformat(),
+                "execution_time": execution_time,
+                "success": success,
+                "logs": logs,
+                "tags": getattr(job, 'tags', [])
+            }
+            
+            # Store in history file
+            history_file = history_dir / f"{job.uid}.json"
+            with open(history_file, 'w') as f:
+                json.dump(job_data, f, indent=2)
+            
+            logger.debug(f"Stored job history for {job.uid}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to store job history: {e}")
     
     def _validate_script(self, script_path: Path) -> bool:
         """Validate that a script is safe to execute."""

@@ -10,7 +10,7 @@ from pathlib import Path
 from loguru import logger
 
 from . import __version__
-from .app import RunnerApp
+from .app import SimpleRunnerApp
 
 
 def main():
@@ -61,7 +61,7 @@ def run_app():
     """Run the SyftBox app mode."""
     try:
         logger.info("Starting Syft Simple Runner...")
-        app = RunnerApp()
+        app = SimpleRunnerApp()
         app.run()
         logger.info("Syft Simple Runner completed successfully")
     except Exception as e:

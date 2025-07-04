@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Tuple
 
 from loguru import logger
-from syft_code_queue import CodeJob
+from .syft_queue import Job
 
 
-def run_job(job: CodeJob, code_dir: Path, output_dir: Path) -> Tuple[bool, str]:
+def run_job(job: Job, code_dir: Path, output_dir: Path, timeout: int = None) -> Tuple[bool, str]:
     """
     Run a code job in a safe environment.
     
@@ -62,8 +62,16 @@ def run_job(job: CodeJob, code_dir: Path, output_dir: Path) -> Tuple[bool, str]:
             universal_newlines=True,
         )
             
-        # Capture output
-        stdout, stderr = process.communicate()
+        # Capture output with timeout
+        try:
+            # Use job timeout if available, otherwise no timeout
+            execution_timeout = timeout or getattr(job, 'timeout_seconds', None)
+            stdout, stderr = process.communicate(timeout=execution_timeout)
+        except subprocess.TimeoutExpired:
+            logger.error(f"Job {job.uid} timed out after {execution_timeout} seconds")
+            process.kill()
+            stdout, stderr = process.communicate()
+            stderr = (stderr or "") + f"\n\nERROR: Process timed out after {execution_timeout} seconds"
 
         # Format logs
         logs = []

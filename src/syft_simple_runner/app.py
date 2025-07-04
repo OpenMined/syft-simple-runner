@@ -14,7 +14,7 @@ import sys
 from time import sleep
 from typing import Optional
 
-from syft_code_queue import CodeJob, JobStatus, QueueConfig, create_client
+from .syft_queue import Job, JobStatus, Queue, q
 
 try:
     from syft_core import Client as SyftBoxClient
@@ -41,20 +41,20 @@ from .runner import run_job
 class SimpleRunnerApp:
     """Simple app that polls for and executes code jobs."""
     
-    def __init__(self, config: Optional[QueueConfig] = None):
+    def __init__(self, queue_name: str = "code-queue"):
         """Initialize the app."""
         try:
             self.syftbox_client = SyftBoxClient.load()
-            self.config = config or QueueConfig(queue_name="code-queue")
-            self.client = create_client(config=self.config)
+            email = self.syftbox_client.email
+            self.queue = q(queue_name, owner_email=email)
 
-            logger.info(f"Initialized Simple Runner App for {self.email}")
+            logger.info(f"Initialized Simple Runner App for {email}")
         except Exception as e:
             logger.warning(f"Could not initialize Simple Runner: {e}")
             # Set up in demo mode
             self.syftbox_client = SyftBoxClient()
-            self.config = config or QueueConfig(queue_name="code-queue")
-            self.client = None
+            email = self.syftbox_client.email
+            self.queue = q(queue_name, owner_email=email)
     
     @property
     def email(self) -> str:
@@ -90,22 +90,43 @@ class SimpleRunnerApp:
     
     def _process_cycle(self):
         """Process one polling cycle."""
-        if self.client is None:
-            return
-
+        # Check for timed out jobs
+        self._check_timeouts()
+        
         # Log pending jobs
         self._log_pending_jobs()
 
         # Execute approved jobs
         self._execute_approved_jobs()
     
+    def _check_timeouts(self):
+        """Check for jobs that have timed out waiting for approval or running too long."""
+        current_time = datetime.now()
+        
+        # Check inbox jobs for approval timeout
+        inbox_jobs = self.queue.list_jobs(status=JobStatus.inbox)
+        for job in inbox_jobs:
+            if job.created_at and job.timeout_seconds:
+                elapsed = (current_time - job.created_at).total_seconds()
+                if elapsed > job.timeout_seconds:
+                    logger.warning(f"Job {job.name} ({job.uid}) has timed out waiting for approval after {elapsed:.0f} seconds")
+                    job.error_message = f"Timed out waiting for approval after {job.timeout_seconds} seconds"
+                    self.queue.move_job(job, JobStatus.timedout)
+        
+        # Check running jobs for execution timeout
+        running_jobs = self.queue.list_jobs(status=JobStatus.running)
+        for job in running_jobs:
+            if job.started_at and job.timeout_seconds:
+                elapsed = (current_time - job.started_at).total_seconds()
+                if elapsed > job.timeout_seconds:
+                    logger.warning(f"Running job {job.name} ({job.uid}) has exceeded timeout of {job.timeout_seconds} seconds")
+                    job.error_message = f"Execution timed out after {job.timeout_seconds} seconds"
+                    self.queue.move_job(job, JobStatus.timedout)
+    
     def _log_pending_jobs(self):
         """Log information about pending jobs."""
-        if self.client is None:
-            return
-        
         # Get pending jobs for this user
-        pending_jobs = self.client.list_jobs(target_email=self.email, status=JobStatus.pending)
+        pending_jobs = self.queue.list_jobs(status=JobStatus.inbox, target_email=self.email)
         
         if pending_jobs:
             logger.info(f"📋 {len(pending_jobs)} job(s) pending approval:")
@@ -115,11 +136,8 @@ class SimpleRunnerApp:
     
     def _execute_approved_jobs(self):
         """Execute all approved jobs."""
-        if self.client is None:
-            return
-        
         # Get approved jobs for this user
-        approved_jobs = self.client.list_jobs(target_email=self.email, status=JobStatus.approved)
+        approved_jobs = self.queue.list_jobs(status=JobStatus.approved, target_email=self.email)
         
         if not approved_jobs:
             # Don't log when no jobs - too verbose for continuous polling
@@ -130,27 +148,23 @@ class SimpleRunnerApp:
         for job in approved_jobs:
             self._execute_single_job(job)
     
-    def _execute_single_job(self, job: CodeJob):
+    def _execute_single_job(self, job: Job):
         """Execute a single job."""
-        if self.client is None:
-            return
-
         logger.info(f"Starting execution of job: {job.name}")
         
         try:
-            # Update status to running
-            job.update_status(JobStatus.running)
-            self.client._save_job(job)
+            # Update status to running and move to running directory
+            self.queue.move_job(job, JobStatus.running)
             
             # Get the job directory
-            job_dir = self.client._get_job_dir(job)
+            job_dir = job.object_path
             code_dir = job_dir / "code"
             run_script = code_dir / "run.sh"
 
             # Validate script
             if not self._validate_script(run_script):
-                job.update_status(JobStatus.rejected, "Script contains potentially dangerous commands")
-                self.client._save_job(job)
+                self.queue.move_job(job, JobStatus.rejected)
+                job.error_message = "Script contains potentially dangerous commands"
                 return
 
             # Create output directory
@@ -161,23 +175,21 @@ class SimpleRunnerApp:
             # Execute the script
             success, logs = run_job(job, code_dir, output_dir)
             
-            # Update job status and logs
-            if success:
-                job.update_status(JobStatus.completed)
-            else:
-                job.update_status(JobStatus.failed, "Execution failed")
-            
             # Save logs
             job.logs = logs
             
+            # Update job status and move to appropriate directory
+            if success:
+                self.queue.move_job(job, JobStatus.completed)
+            else:
+                job.error_message = "Execution failed"
+                self.queue.move_job(job, JobStatus.failed)
+            
         except Exception as e:
             logger.error(f"Error executing job {job.name}: {e}")
-            job.update_status(JobStatus.failed, str(e))
+            job.error_message = str(e)
             job.logs = str(e)
-        
-        finally:
-            # Always save the final job state
-            self.client._save_job(job)
+            self.queue.move_job(job, JobStatus.failed)
     
     def _validate_script(self, script_path: Path) -> bool:
         """Validate that a script is safe to execute."""

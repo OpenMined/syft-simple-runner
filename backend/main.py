@@ -25,19 +25,21 @@ from .utils import (
 )
 
 try:
-    import syft_code_queue as q
-    from syft_code_queue import JobStatus
+    from syft_queue import JobStatus, Queue, q
+    q_available = True
 except ImportError:
-    logger.error("syft-code-queue not available - job browsing features will be limited")
-    q = None
-    # Mock JobStatus for when syft-code-queue is not available
+    logger.error("syft-queue not available - job browsing features will be limited")
+    q_available = False
+    JobStatus = None
+    # Mock JobStatus for when syft_queue is not available
     class JobStatus:
-        pending = "pending"
+        inbox = "inbox"
         approved = "approved"
         running = "running"
         completed = "completed"
         failed = "failed"
         rejected = "rejected"
+        timedout = "timedout"
 
 
 def get_client() -> Client:
@@ -92,7 +94,7 @@ async def get_status(client: Client = Depends(get_client)) -> StatusResponse:
             "backend": "running",
             "runner": "active",
             "job_history": "available",
-            "job_browser": "enabled" if q else "disabled"
+            "job_browser": "enabled" if q_available else "disabled"
         }
     )
 

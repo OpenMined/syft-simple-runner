@@ -10,36 +10,37 @@ from syft_core import Client
 from .models import JobHistoryItem
 
 try:
-    import syft_code_queue as q
-    from syft_code_queue import JobStatus, create_client
+    from syft_queue import JobStatus, Queue, q
+    queue_available = True
 except ImportError:
-    logger.error("syft-code-queue not available - job history will be limited")
+    logger.error("syft-queue not available - job history will be limited")
+    queue_available = False
     q = None
-    create_client = None
     class JobStatus:
-        pending = "pending"
+        inbox = "inbox"
         approved = "approved"
         running = "running"
         completed = "completed"
         failed = "failed"
         rejected = "rejected"
+        timedout = "timedout"
 
 
 def get_job_history(client: Client, limit: int = 50, status_filter: Optional[str] = None) -> List[JobHistoryItem]:
-    """Get job execution history from the syft-code-queue."""
+    """Get job execution history from the syft-queue."""
     try:
-        # Try to get jobs from syft-code-queue
-        if q and create_client:
+        # Try to get jobs from syft-queue
+        if queue_available and q:
             try:
-                queue_client = create_client()
+                queue_instance = q("code-queue")
                 # Get jobs for this user
-                all_jobs = queue_client.list_jobs(target_email=client.email)
+                all_jobs = queue_instance.list_jobs(target_email=client.email)
                 
                 # Filter and convert to JobHistoryItem
                 history_items = []
                 for job in all_jobs:
                     # Apply status filter if provided
-                    if status_filter and job.status.value != status_filter:
+                    if status_filter and str(job.status) != status_filter:
                         continue
                     
                     # Calculate execution time if possible

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Tuple
 
 from loguru import logger
-from .syft_queue import Job
+from syft_queue import Job
 
 
 def run_job(job: Job, code_dir: Path, output_dir: Path, timeout: int = None) -> Tuple[bool, str]:
